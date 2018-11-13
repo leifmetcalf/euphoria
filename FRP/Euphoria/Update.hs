@@ -22,7 +22,8 @@ import Control.Applicative
 import Control.Monad
 import Data.IORef
 import Data.Maybe
-import Data.Monoid
+import Data.Semigroup hiding (Last(..))
+import Data.Monoid hiding ((<>))
 import Data.Unique
 import Unsafe.Coerce
 
@@ -72,14 +73,17 @@ instance Applicative Update where
             left f = (f, mempty)
             right a = (mempty, a)
 
+instance Monoid a => Semigroup (Update a) where
+  Update f x <> Update g y = Update
+      (\(s0, s1) -> f s0 `mappend` g s1)
+      ((left <$> x) <> (right <$> y))
+      where
+          left val = (val, mempty)
+          right val = (mempty, val)
+
 instance (Monoid a) => Monoid (Update a) where
     mempty = Update (\() -> mempty) mempty
-    Update f x `mappend` Update g y = Update
-        (\(s0, s1) -> f s0 `mappend` g s1)
-        ((left <$> x) `mappend` (right <$> y))
-        where
-            left val = (val, mempty)
-            right val = (mempty, val)
+    mappend = (<>)
 
 -- | Convert an 'Event' to an 'Update' by combining the occurrences,
 -- i.e. without doing any shortcut.
@@ -157,6 +161,9 @@ data DynUpdateState a =
         !a -- accumulated final result
 
 newtype IOMonoid a = IOMonoid {unIOMonoid :: IO a}
+
+instance Semigroup a => Semigroup (IOMonoid a) where
+    IOMonoid m <> IOMonoid n = IOMonoid $ (<>) <$> m <*> n
 
 instance (Monoid a) => Monoid (IOMonoid a) where
     mempty = IOMonoid (return mempty)
